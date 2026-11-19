@@ -1,9 +1,4 @@
-# Project 2 - Gossip Simulator
-
-Group 6
-
-- Sreenidhee Vidya Modugu (UFID: 7634 8994)
-- Manvitha Gangasani (UFID: 3747 1957)
+# Gossip Simulator
 
 ## How to run
 
