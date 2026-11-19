@@ -1,0 +1,103 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Project 2 Report</title>
+<style>
+  @page { size: Letter; margin: 0.9in; }
+  body { font-family: "Times New Roman", Times, serif; font-size: 12pt; line-height: 1.4; color: #000; background: #fff; }
+  h1 { font-size: 18pt; margin: 0 0 4pt; text-align: center; }
+  h2 { font-size: 14pt; margin: 16pt 0 6pt; page-break-after: avoid; break-after: avoid; }
+  .meta { text-align: center; margin-bottom: 14pt; }
+  .fig { margin: 8pt 0 2pt; page-break-inside: avoid; text-align: center; }
+  .fig svg { width: 85%; height: auto; }
+  .cap { font-size: 10.5pt; text-align: center; margin: 0 0 12pt; }
+  table { border-collapse: collapse; margin: 6pt auto 12pt; }
+  th, td { border: 1px solid #999; padding: 3pt 8pt; text-align: left; }
+  .pb { page-break-before: always; }
+  p { margin: 0 0 8pt; text-align: justify; }
+</style></head>
+<body>
+<h1>Project 2 - Gossip Simulator Report</h1>
+<div class="meta">Group 6<br>
+Sreenidhee Vidya Modugu (UFID: 7634 8994)<br>
+Manvitha Gangasani (UFID: 3747 1957)</div>
+
+<h2>1. How we ran the experiments</h2>
+<p>We wrote the simulator in Erlang, with every node as its own process. For each topology and algorithm we
+increased the number of nodes until a run either got too slow (we stopped at 15 minutes) or the laptop ran out
+of memory. If a run took less than 30 seconds we did it 3 times and used the median; otherwise we ran it once.
+All runs were on an 8-core MacBook Air with 8 GB of RAM. The time is measured with the measure_running_time
+function from the assignment, starting when the main process sends the first message and ending when it
+detects convergence. Spawning the actors is not included. For 2D and imp2D the number of nodes is rounded up to
+the next square.</p>
+<p>For gossip, an actor that knows the rumor sends it to a random neighbour once every 1 ms and stops after
+hearing it 10 times. We say gossip has converged when every actor has heard the rumor at least once. For
+push-sum, an actor adds every pair it receives to its own s and w and sends half of the result on, so there is
+always exactly one message moving through the network. An actor stops after 3 receives in a row where s/w
+changed by less than 10<sup>-10</sup>, and push-sum has converged when every actor has stopped.</p>
+
+<h2>2. Gossip</h2>
+{{fig:base_gossip}}
+<p class="cap">Figure 1: Gossip convergence time vs. number of nodes (both axes log scale)</p>
+
+<p>The line is much slower than everything else. It went from 0.31 s with 100 nodes to 2.6 s with 1000, 25 s
+with 10,000 and 293 s with 100,000. That is about linear in N, which makes sense since the rumor has to travel
+from one end of the line to the other one actor at a time. From the numbers, the rumor moves forward about one
+actor every 3 ms.</p>
+<p>The 2D grid grows a lot more slowly, roughly with the square root of N (60 ms at 100 nodes and 458 ms at
+10,000, so 100 times the nodes took about 7.6 times as long). The longest distance across a grid is about
+2&radic;N, so this matches what we expected.</p>
+<p>The full network and imp2D were almost flat until about 3000 nodes, around 30 to 50 ms, which is a few dozen of
+our 1 ms rounds. In a full network the number of informed actors roughly doubles every round, so it only needs
+about log N rounds. What surprised us was how close imp2D is to the full network. Just one random extra neighbour
+per actor is enough to make it behave almost like the full network, and it was 2 to 6 times faster than the
+normal 2D grid at every size we tried.</p>
+<p>After about 10,000 nodes all the curves start going up more steeply. Every informed actor sends a message
+every millisecond, so with enough actors the 8 cores can't keep up and the run becomes limited by CPU instead of
+by the number of rounds. The 1,000,000 node full network (134 s) was also slowed down because the laptop started
+using swap.</p>
+<p>The 10-times stopping rule doesn't guarantee that everyone hears the rumor. In 2 of our 91 gossip runs (imp2D
+with 300k and with 1M nodes) one or two actors never got it, because all their neighbours had already stopped.
+Our program notices this and reports how many actors were reached instead of waiting forever.</p>
+<p>We also learned that the 1 ms timer matters a lot. In our first version the actors just sent as fast as they
+could. An actor could then put many rumors into its neighbour's mailbox before the neighbour even ran, so the
+neighbour reached 10 and stopped without ever passing the rumor on. On the line the rumor only got to about 3
+actors. Adding the timer fixed this.</p>
+
+<h2 class="pb">3. Push-Sum</h2>
+{{fig:base_push-sum}}
+<p class="cap">Figure 2: Push-Sum convergence time vs. number of nodes (both axes log scale)</p>
+
+<p>The full network was the fastest: 135 ms at 1000 nodes, 1.5 s at 10,000 and 13.6 s at 100,000, so roughly
+linear. Since there is only one message, every actor has to receive it several times after its value has
+settled, which needs on the order of N log N hops. The 300,000 node run took 481 s. That is much worse than the
+trend (3 times more nodes but 35 times slower), and we think the laptop was running low on memory, but we didn't
+check this.</p>
+<p>imp2D was about 2 to 4 times slower than the full network and grew at the same rate. The 2D grid was much
+worse and grew roughly with N<sup>2</sup>: 42 ms at 100 nodes, 4.1 s at 1024 and 378 s at 10,000. On a grid the
+message moves around like a random walk and it takes a long time for values to spread from one side to the
+other.</p>
+<p>The line finished, but the results were wrong (Figure 3), and the times jump around because of that.</p>
+
+{{fig:base_pushsum_error}}
+<p class="cap">Figure 3: Largest relative error of any actor's estimate at the end of the run</p>
+
+<p>On the full network the worst actor was within 10<sup>-12</sup> to 10<sup>-14</sup> of the real average. imp2D
+was around 10<sup>-11</sup>, and the 2D grid slowly got worse, up to about 10<sup>-7</sup> at 10,000 nodes. On the
+line the stopping rule doesn't work well. Neighbours on a line have almost the same value, so an actor can get 3
+messages in a row that barely change its s/w even though values from the far end haven't reached it yet. It
+stops too early with something closer to a local average. The worst error went from 2% at 100 nodes to 76% at
+1000 and 97% at 3000. The average of all the estimates was still close to the right answer, though. So the
+3-round rule only works well on topologies where values spread quickly.</p>
+
+<h2>4. Summary</h2>
+<table>
+  <tr><th>Topology</th><th>Largest (gossip)</th><th>Time</th><th>Largest (push-sum)</th><th>Time</th></tr>
+  <tr><td>Full</td><td>1,000,000</td><td>134 s</td><td>300,000</td><td>481 s</td></tr>
+  <tr><td>2D</td><td>300,304</td><td>2.9 s</td><td>10,000</td><td>378 s</td></tr>
+  <tr><td>Line</td><td>100,000</td><td>293 s</td><td>3,000</td><td>50 s (not accurate)</td></tr>
+  <tr><td>imp2D</td><td>300,304</td><td>2.9 s</td><td>100,489</td><td>56 s</td></tr>
+</table>
+<p>For both algorithms the order from fastest to slowest was the same: full, then imp2D (very close), then 2D,
+then line. The most interesting thing for us was how much one random long-distance link per actor helps. Gossip
+was mostly limited by how far apart the actors are. Push-sum, with its single message, was limited by how fast a
+random walk spreads values around, and how accurate its answer was also depended a lot on the topology.</p>
+</body></html>

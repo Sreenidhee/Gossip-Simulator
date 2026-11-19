@@ -1,0 +1,8 @@
+#!/bin/sh
+# Usage: ./project2 numNodes topology algorithm
+DIR="$(cd "$(dirname "$0")" && pwd)"
+# Compile automatically if the .beam files are missing or older than the sources.
+if [ ! -f "$DIR/ebin/project2.beam" ] || [ -n "$(find "$DIR/src" -name '*.erl' -newer "$DIR/ebin/project2.beam")" ]; then
+    mkdir -p "$DIR/ebin" && erlc -o "$DIR/ebin" "$DIR"/src/*.erl || exit 1
+fi
+ERL_CRASH_DUMP_SECONDS=0 exec erl -noshell +P 8000000 -pa "$DIR/ebin" -run project2 main "$@"
